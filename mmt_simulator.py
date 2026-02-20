@@ -5,7 +5,7 @@ import scipy.fft as fft
 def nonlinearity(wn):
     Ntot = wn.size
     dxbwn = Ntot * fft.ifft(wn)
-    return 1j * fft.fft( dxbwn * np.real(np.abs(dxbwn)**2.) )/Ntot # Computation of nonlinearity.  DE-FOCUSING CASE!!!!!!!!!
+    return 1j * fft.fft( dxbwn * np.real(np.abs(dxbwn)**2.) )/Ntot # type: ignore # Computation of nonlinearity.  DE-FOCUSING CASE!!!!!!!!!
 
 def rk4(wn, Dtot_hlf, Dtot_fll, dt, force_diss):
     k1 = dt * nonlinearity(wn)
@@ -48,39 +48,44 @@ def multiscale_decomp(wn, Dxa, fwidths, tskip):
         multiscale_sep[cnt, :] = transferfun(avg,flucfreqavg)
     return multiscale_sep
 
-def mmt_solver(Nval, Tf, ep_val, dt, samp_indx_rate, inertialright):
+def mmt_solver(Nval, Llx, Tf, ep_val, dt, samp_indx_rate, inertialright):
 
     Nsteps = int(Tf/dt) # Number of time steps
     
     alpha = .5
     gamma = 2. 
         
-    Dxa = np.abs(np.concatenate((np.arange(Nval+1),np.arange(-Nval+1,0,1)),0)) # note, we never need a naked Dx
+    bxscl = np.pi/Llx
+
+    Dxa = bxscl * np.abs(np.concatenate((np.arange(Nval+1),np.arange(-Nval+1,0,1)),0)) # note, we never need a naked Dx
     Dxalpha = Dxa**alpha   
     
     Dxinv = np.ones(2*Nval, dtype=np.complex128)
     Dxinv[1:] = 1./Dxa[1:]
             
+    #kforcelow = 6 * np.pi/Llx
+    #kforcehigh = 9 * np.pi/Llx
+
     kforcelow = 6
     kforcehigh = 9
 
-    kforcevals = ep_val**2. * np.ones(kforcehigh-kforcelow+1)
+    kforcevals = ep_val**2. * np.ones(kforcehigh-kforcelow+1) * bxscl
     force = np.zeros(2*Nval, dtype=np.complex128)
     force[kforcelow:kforcehigh+1] = kforcevals
     force[2*Nval-(kforcehigh+1):2*Nval-kforcelow] = kforcevals[::-1]
     
     dminus = 8
     dplus = 8
-    klow = kforcelow-1
+    klow = (kforcelow-1)
     kplus = int(Nval/2)
     numinus = ep_val**2.
     nuplus = ep_val**2.
 
     highfreqdamp = np.zeros(2*Nval, dtype=np.complex128)
     lowfreqdamp = np.zeros(2*Nval, dtype=np.complex128)
-    highfreqdamp[kplus:-kplus] = nuplus * (Dxa[kplus:-kplus]/kplus)**dplus
-    lowfreqdamp[:klow] = numinus * (klow*Dxinv[:klow])**dminus
-    lowfreqdamp[-klow:] = numinus * (klow*Dxinv[-klow:])**dminus
+    highfreqdamp[kplus:-kplus] = nuplus * (Dxa[kplus:-kplus]/(kplus*bxscl))**dplus
+    lowfreqdamp[:klow] = numinus * ((klow*bxscl)*Dxinv[:klow])**dminus
+    lowfreqdamp[-klow:] = numinus * ((klow*bxscl)*Dxinv[-klow:])**dminus
     
     fdvec = force - highfreqdamp - lowfreqdamp
     force_diss = np.exp(dt * fdvec)
@@ -88,26 +93,26 @@ def mmt_solver(Nval, Tf, ep_val, dt, samp_indx_rate, inertialright):
     Dtot_hlf = np.exp((-1j * Dxalpha) * dt/2.)
     Dtot_fll = np.exp((-1j * Dxalpha) * dt)    
         
-    #samp_indx_rate = 400
     dts = samp_indx_rate * dt
     
     measured_time = inertialright/ep_val**2.
+    #measured_time = inertialright**2./ep_val**4. # arguably the right time scale.  
     shift_index = int(measured_time/dt)
     measure_index = int((Tf - measured_time)/dts)+1
     
-    init_cond_index = int(100./dt)
-    mid_cond_index = int(2000./dt)
+    #init_cond_index = int(100./dt)
+    #mid_cond_index = int(2000./dt)
 
-    hmltnlinear = np.zeros(measure_index, dtype=np.float64)
-    hmltnnonlinear = np.zeros(measure_index, dtype=np.float64)
+    #hmltnlinear = np.zeros(measure_index, dtype=np.float64)
+    #hmltnnonlinear = np.zeros(measure_index, dtype=np.float64)
     
     tseries = np.zeros((2*Nval, measure_index), dtype=np.complex128)
-    tseries_short = np.zeros((2*Nval, int(init_cond_index*dt/dts)), dtype=np.complex128)
-    tseries_mid = np.zeros((2*Nval, int((mid_cond_index-init_cond_index)*dt/dts)+1), dtype=np.complex128)
+    #tseries_short = np.zeros((2*Nval, int(init_cond_index*dt/dts)), dtype=np.complex128)
+    #tseries_mid = np.zeros((2*Nval, int((mid_cond_index-init_cond_index)*dt/dts)+1), dtype=np.complex128)
     
     tavg = np.zeros(2*Nval, dtype=np.float64)
-    shrt_cnt = 0
-    mid_cnt = 0
+    #shrt_cnt = 0
+    #mid_cnt = 0
     cnt = 0
     
     wn = np.zeros(2*Nval,dtype=np.complex128) # Initialize the solution vector and associated parts of multi-step solver.
@@ -121,25 +126,29 @@ def mmt_solver(Nval, Tf, ep_val, dt, samp_indx_rate, inertialright):
 
         if jj%samp_indx_rate == 0:
 
-            if jj <= init_cond_index:
-                tseries_short[:, shrt_cnt] = wn[:]
-                shrt_cnt += 1
+            #if jj <= init_cond_index:
+                #tseries_short[:, shrt_cnt] = wn[:]
+            #    shrt_cnt += 1
 
-            if jj >= init_cond_index and jj <= mid_cond_index:
-                tseries_mid[:, mid_cnt] = wn[:]
-                mid_cnt += 1
+            #if jj >= init_cond_index and jj <= mid_cond_index:
+                #tseries_mid[:, mid_cnt] = wn[:]
+            #    mid_cnt += 1
 
             if jj >= shift_index:
                 action = np.abs(wn)**2.
                 tavg += action
-                hmltnlinear[cnt] = np.sum( np.abs(2*Nval*fft.ifft(np.sqrt(Dxalpha)*wn))**2. )
-                hmltnnonlinear[cnt] = .5 * np.sum( np.abs(2*Nval*fft.ifft(wn))**4. )               
+                #hmltnlinear[cnt] = np.sum( np.abs(2*Nval*fft.ifft(np.sqrt(Dxalpha)*wn))**2. )
+                #hmltnnonlinear[cnt] = .5 * np.sum( np.abs(2*Nval*fft.ifft(wn))**4. )               
                 tseries[:, cnt] = wn
                 cnt += 1
+
+            if jj%10000*samp_indx_rate == 0:
+                print(f"Current index is {jj}")
                     
     #fwidths = [.95 * (1./inertialleft), .5 * (1./inertialleft), 2 * 1./inertialright, 1.05 * 1./inertialright]
     #tskip = int(10/dts)
     #multiscale_sep = multiscale_decomp(tseries, Dxa, fwidths, tskip)
-    return [wn, wn0, hmltnlinear, hmltnnonlinear, tavg/cnt, tseries_short, tseries_mid, tseries]
+    #return [wn, wn0, hmltnlinear, hmltnnonlinear, tavg/cnt, tseries]
+    return [wn, wn0, tavg/cnt, tseries]
 
 

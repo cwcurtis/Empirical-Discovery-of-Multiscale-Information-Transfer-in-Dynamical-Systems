@@ -14,7 +14,7 @@ def transferfun(avg, flucsq):
     Ntot = avg.shape[0]
     avgphys = Ntot * fft.ifft(avg, axis=0)
     flucsqphys = Ntot * fft.ifft(flucsq, axis=0)    
-    return np.mean(( np.conj(avgphys) )**2. * flucsqphys, axis=0)
+    return -2.*np.imag(np.mean(( np.conj(avgphys) )**2. * flucsqphys, axis=0))
 
 def window_time_average(wn, tskip):
     tvec = np.ones(tskip, dtype=np.complex128)/tskip        
@@ -37,23 +37,23 @@ def window_time_average(wn, tskip):
 
 def multiscale_decomp(wn, inertialleft, inertialright, lends, rends, tskip):
     Ntot = wn.shape[0]    
-    multiscale_sep = np.zeros((len(lends), wn.shape[1]-tskip+1), dtype=np.float64)
-    
+    multiscale_sep = np.zeros((len(lends), wn.shape[1]-2*tskip+2), dtype=np.float64)
+            
     for cnt in range(lends.size):
-        avg = average(wn, lends[cnt], rends[cnt])
-        fluc = wn - avg
+        avg = window_time_average(average(wn,lends[cnt],rends[cnt]), tskip)    
+        fluc = wn[:,:-tskip+1] - avg    
         fluc_cut = average(fluc, inertialleft, inertialright)
         flucphys = Ntot * fft.ifft(fluc_cut, axis=0)
-        flucfreq = fft.fft( flucphys**2., axis=0)/Ntot
-        flucfreqavg = average(flucfreq, lends[cnt], rends[cnt])
-        multiscale_sep[cnt, :] = np.imag(window_time_average(transferfun(avg, flucfreqavg), tskip))
+        flucfreq = fft.fft(flucphys**2., axis=0)/Ntot
+        flucfreqavg = window_time_average(average(flucfreq, lends[cnt], rends[cnt]), tskip)
+        multiscale_sep[cnt, :] = transferfun(avg[:,:-tskip+1], flucfreqavg)
         
     return multiscale_sep
 
+
 def scale_sep_and_downsampling(tseries, dts, ep_val, avgscl, inertialleft, inertialright, lends, rends):
     tskip = int( (avgscl/ep_val**2.) / dts)
-    tseries_red = window_time_average(tseries, tskip)
-    multiscale_sep = multiscale_decomp(tseries_red, inertialleft, inertialright, lends, rends, tskip)
+    multiscale_sep = multiscale_decomp(tseries, inertialleft, inertialright, lends, rends, tskip)
     return multiscale_sep, tskip
 
 
