@@ -1,7 +1,5 @@
 import numpy as np
 import scipy.fft as fft
-import ewt as ewt
-import multi_breaks_otsu as mbo
 import knn_mi_comp as mi 
 
 def average(wn, kleft, kcut):
@@ -81,20 +79,6 @@ def windowed_deprecation(dep_fac, tseries):
     
     return tseries_dep
 
-def ewt_scale_separator(multiscale, kvec0, kvals, molfac):
-    NUM_SCALES = len(kvec0) + 1
-
-    separated_scales = np.zeros((multiscale.shape[0], multiscale.shape[1], NUM_SCALES))
-    for jj in range(multiscale.shape[0]):
-        kbreaks, pdist, kmax = mbo.otsu_breaks_builder(multiscale[jj, :], molfac, kvec0)
-        pvals = np.ma.log10(pdist(kvals))
-        kbreaks = np.sort(kbreaks)
-        if kbreaks[0] == 0:
-            kbreaks = kbreaks[1:]
-            NUM_SCALES -= 1
-            print("Clipping off zero break")
-        separated_scales[jj, :, :] = ewt.EWT_Decomp(kbreaks, multiscale[jj, :])
-    return separated_scales, kbreaks, pvals
 
 def mseries_average_mi_comp(measuredseries, chunks, kneighbrs):
     chunk_size = int(np.floor(measuredseries.size/chunks))
